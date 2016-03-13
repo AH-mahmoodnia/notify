@@ -6,8 +6,7 @@ import (
 	"net/rpc"
 )
 
-func handleAgent(report chan<- Message) {
-	addr := "127.0.0.1:31416"
+func handleAgent(addr string, report chan<- Message) {
 	agent := Agent{update: report}
 	rpc.Register(&agent)
 	listener, err := net.Listen("tcp", addr)

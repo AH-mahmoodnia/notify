@@ -11,12 +11,12 @@ import (
 	"time"
 )
 
-func startClient() {
+func startClient(addr string) {
 	var err error
 	rand.Seed(time.Now().UnixNano())
 	id := rand.Int63()
 	// establish RPC connection with server
-	client, err := rpc.Dial("tcp", "127.0.0.1:31416")
+	client, err := rpc.Dial("tcp", addr)
 	if err != nil {
 		log.Fatalln("Failed to connect to server:", err.Error())
 		panic("should not reach this")
@@ -32,23 +32,23 @@ func startClient() {
 	updateChan := make(chan string)
 	go lineReader(updateChan)
 	// start event processing loop
+eventloop:
 	for {
 		select {
 		case <-signalChan:
 			client.Call("Agent.Done", "", &result)
-			return
+			break eventloop
 		case line, ok := <-updateChan:
 			if !ok {
 				// channel closed
-				return
+				break eventloop
 			}
 			if err = client.Call("Agent.Update", &RpcUpdateMessage{Id: id, Message: line}, &result); err != nil {
-				log.Println("Error connecting to server:", err.Error())
-				return
+				log.Println("Error communicating to server:", err.Error())
+				break eventloop
 			}
 		}
 	}
-	panic("should not reach this")
 }
 
 func lineReader(updateChan chan<- string) {

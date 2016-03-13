@@ -23,17 +23,18 @@ func main() {
 	flag.BoolVar(&config.serve, "serve", false, "Start notification server.")
 	flag.BoolVar(&config.verbose, "verbose", false, "Verbose output.")
 	flag.Parse()
+	webAddr := "127.0.0.1:31415"
+	agentAddr := "127.0.0.1:31416"
 	if config.serve {
 		go repeater.Run()
-		go handleAgent(updateChan)
+		go handleAgent(agentAddr, updateChan)
 		http.HandleFunc("/", handleIndex)
 		http.HandleFunc("/web/", handleWeb)
 		http.Handle("/ws/", websocket.Handler(handleWS))
-		addr := "127.0.0.1:31415"
-		log.Println("Listening on " + addr)
-		log.Fatalln(http.ListenAndServe(addr, nil))
+		log.Println("Listening for clients on " + webAddr)
+		log.Fatalln(http.ListenAndServe(webAddr, nil))
 	} else {
-		startClient()
+		startClient(agentAddr)
 	}
 }
 
@@ -47,16 +48,24 @@ func handleWeb(resp http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 	resp.Write([]byte(`<!DOCTYPE html>
 	<html>
-	<header>
-	</header>
-	<body>
+	<head>
 	<style type="text/css">
+	h1 {
+		color: #333;
+		font-size: 14pt;
+		text-decoration: underline;
+	}
 	.report {
 		border: 1px solid;
 	}
 	.report .title {
 		color: white;
 		background-color: black;
+		border: 0px 0px 0px 1px solid black;
+	}
+	.report .title a {
+		color: black;
+		background-color: white;
 	}
 	.done {
 		background-color: lightgray;
@@ -65,6 +74,9 @@ func handleWeb(resp http.ResponseWriter, req *http.Request) {
 		display: block;
 	}
 	</style>
+	</head>
+	<body>
+	<h1>Notify</h1>
 	<script type="text/javascript">
 	// Set up notifications
 	if (Notification.permission === "granted") {
@@ -84,14 +96,7 @@ func handleWeb(resp http.ResponseWriter, req *http.Request) {
 		let msg = JSON.parse(event.data)
 		reportCtrl = document.getElementById("report-" + msg.Id);
 		if (reportCtrl === null) {
-			reportCtrl = document.createElement("pre");
-			reportCtrl.id = "report-" + msg.Id;
-			reportCtrl.className = "report";
-			reportTitle = document.createElement("div");
-			reportTitle.className = "title";
-			title = document.createTextNode("Report " + msg.Id);
-			reportTitle.appendChild(title);
-			reportCtrl.appendChild(reportTitle);
+			reportCtrl = createReport(msg.Id);
 			document.body.appendChild(reportCtrl);
 		}
 		reportCtrl.insertAdjacentHTML('beforeend', '<div class="line">' + msg.Message + '</div>');
@@ -110,6 +115,28 @@ func handleWeb(resp http.ResponseWriter, req *http.Request) {
 	socket.onclose = function() {
 		console.log("Connection closed.");
 	};
+
+	function createReport(id) {
+		reportCtrl = document.createElement("pre");
+		reportCtrl.id = "report-" + id;
+		reportCtrl.className = "report";
+		removeLink = document.createElement("a");
+		removeLink.onclick = function() {
+			if (window.confirm("Remove this report?")) {
+				reportCtrl.remove();
+			}
+		};
+		removeLinkText = document.createTextNode(" X ");
+		removeLink.appendChild(removeLinkText);
+		reportTitle = document.createElement("div");
+		reportTitle.className = "title";
+		reportTitle.appendChild(removeLink);
+		reportTitle.appendChild(document.createTextNode(" "));
+		title = document.createTextNode('Report ' + id);
+		reportTitle.appendChild(title);
+		reportCtrl.appendChild(reportTitle);
+		return reportCtrl;
+	}
 	</script>
 	</body>
 	</html>
